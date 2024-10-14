@@ -1,0 +1,14 @@
+data_process==0.3.9
+einops==0.8.0
+nibabel==5.3.0
+numpy==2.1.2
+open3d==0.18.0
+probreg==0.3.7
+pytorch3d==0.7.4
+pyvista==0.43.2
+scipy==1.14.1
+torch==2.1.1+cu118
+torch_geometric==2.6.1
+torch_scatter==2.1.2+pt21cu118
+torchvision==0.16.1+cu118
+trimesh==4.0.10
