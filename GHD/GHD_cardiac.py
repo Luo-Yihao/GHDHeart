@@ -171,13 +171,13 @@ class GHD_Cardiac(GHDmesh):
 
 
 
-        optmizer = torch.optim.AdamW([{'params':optim_params, 'lr':0.01}])
+        optmizer = torch.optim.AdamW(optim_params, lr=lr_start)
         scheduler = torch.optim.lr_scheduler.StepLR(optmizer, step_size=100, gamma=0.8)
 
         thinknesser = MeshThickness(r=0.2, num_bundle_filtered=50, innerp_threshold=0.6, num_sel=10)
 
         Loss_GHD = 0.
-        loop = tqdm(range(num_iter), desc='Total Loss: %.4f'%(Loss_GHD))
+        loop = tqdm(range(num_iter))
 
         if record_convergence:
             convergence = []
@@ -265,6 +265,8 @@ class GHD_Cardiac(GHDmesh):
                 Loss_dict_list.append(Loss_dict)
                 if j<1000 and j%10==0:
                     convergence.append(current_lv_mesh.verts_packed().detach())
+
+            loop.set_description('Total Loss %.4f'%(Loss_GHD.item()))
                     
         print('fittings done, the final loss is %.6f'%(Loss_GHD.item()))
         Loss_dict = {key:Loss_values[key].item() for key in Loss_values.keys()}

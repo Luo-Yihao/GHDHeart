@@ -1,0 +1,3 @@
+*.pyc
+Demo/current_mesh_ghd.obj
+Demo/output/*

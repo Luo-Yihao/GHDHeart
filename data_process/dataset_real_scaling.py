@@ -126,7 +126,7 @@ def point_cloud_extractor(img3d,  label_value_list, window, spacing=200, coordin
     Extract point cloud from the 3D image tensor in the real world coordinate
     img3d: 3D image tensor [1, 1, X, Y, Z]
     label_value_list: list of label values
-    window: window size in real world coordinate
+    window: window size in real world coordinate 
     spacing: the spacing of renormalization, default is 200 mm [-1,1] <==> [-100,100]
     coordinate_order: the order of the coordinate, default is zyx to adapt Pytorch & Pytorch3D
     """
@@ -152,11 +152,13 @@ def point_cloud_extractor(img3d,  label_value_list, window, spacing=200, coordin
     else:
         for label_value in label_value_list:
             point_cloud = torch.where(img3d[0,0,...]==label_value)
+            
             point_cloud = torch.stack([point_cloud[0],point_cloud[1],point_cloud[2]],dim = -1)
             # normalize to -1,1 from the original resolution
             point_cloud = point_cloud/(torch.tensor(img3d.shape[-3:]).float().to(device)-1)*2-1
+            
             # scale to the real world size
-            point_cloud = point_cloud*torch.tensor(window).float().to(device)/2
+            point_cloud = point_cloud*(torch.tensor(window).float().to(device)/2).unsqueeze(0)
             # # renormalize by the 200*200*200 mm3 window
             point_cloud = point_cloud/spacing*2
 
@@ -259,12 +261,13 @@ class MMWHS_dataset(Dataset):
 
     def __init__(self, output_size = (128,128,128), dataset_path = './Dataset/MMWHS/',mode='train', modelity = 'ct', process_device = 'cuda', label_value_list = [[205.,600],[205.]], eps=0.1, if_augment=False, rot_factor = 0.0, trans_factor = 0.0,  scale_facter = 0.0):
         self.process_device = process_device
-        self.dataset_path = dataset_path+modelity+'_'+mode+'/'
+        # self.dataset_path = dataset_path+modelity+'_'+mode+'/'
+        self.dataset_path = os.path.join(dataset_path,modelity+'_'+mode)
         self.label_value = np.array([  0., 205., 420., 500., 550., 600., 820., 850.])
         self.mode = mode
         self.modelity_mode = modelity+'_'+mode
-        self.nii_path = self.dataset_path+self.modelity_mode+'_'
-        self.gt_path = self.dataset_path+self.modelity_mode+'_'
+        self.nii_path = os.path.join(self.dataset_path,self.modelity_mode+'_')
+        self.gt_path = os.path.join(self.dataset_path, self.modelity_mode+'_')
         self.label_value_list = label_value_list
         self.mesh_folder = dataset_path+'mesh_gt/'
         self.output_size = output_size
@@ -553,6 +556,39 @@ class UKBBAtlas_Simple_dataset(Dataset):
     
     def __len__(self):
         return 21
+
+
+class Example_Simple_dataset(Dataset):
+
+    def __init__(self,  dataset_path = './Dataset/UKBBAtlas/', process_device = 'cuda'):
+        self.process_device = process_device
+        self.dataset_path = dataset_path
+        self.label_value = np.array([ 0., 1., 2., 4.])
+
+    def __getitem__(self,index):
+        if index == 0:
+            label_path = os.path.join(self.dataset_path, 'label_ED.nii.gz')
+        elif index == 1:
+            label_path = os.path.join(self.dataset_path, 'label_ES.nii.gz')
+
+        nib_label = nib.load(label_path)
+        
+
+        header = nib_label.header
+        label = nib_label.get_fdata()
+
+        voxel_size = header.get_zooms()
+
+
+        window = (np.array(voxel_size)*(np.array(label.shape)-1))[:-1]
+
+
+        label = torch.from_numpy(label).squeeze(-1).float().to(self.process_device).unsqueeze(0)
+
+        return {'img': None, 'seg_gt':label, 'window': window}
+    
+    def __len__(self):
+        return 2
 
 class ACDC_dataset(Dataset):
 
