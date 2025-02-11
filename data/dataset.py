@@ -103,6 +103,17 @@ class MMWHSDataset_3DLabel(Dataset):
                  modality = 'ct', center_aligned = True, rescalar = 1/100, RML_simple = False):
         super().__init__()
         self.dataset_path = dataset_path
+        if output_shape is not None:
+            self.dataset_path_aligned = os.path.join(dataset_path, 'aligned_'+str(output_shape[0])+'_'+str(output_shape[1])+'_'+str(output_shape[2]))
+        else:
+            self.dataset_path_aligned = os.path.join(dataset_path, 'aligned')
+
+        if RML_simple:
+            self.dataset_path_aligned = self.dataset_path_aligned+'_simple'
+
+        if not os.path.exists(self.dataset_path_aligned):
+            os.makedirs(self.dataset_path_aligned)
+
         self.label_value = np.array([  0., 205., 420., 500., 550., 600., 820., 850.])
         self.simple_label = np.array([0., 600., 205., 500.]) # [BG, RV, LMYO, LV]
         self.mode = mode
@@ -131,34 +142,39 @@ class MMWHSDataset_3DLabel(Dataset):
             index = index+1
         elif self.mode == 'test':
             index = index+1001
-        
-        dataset_path = os.path.join(self.dataset_path, modality+'_'+self.mode)
+
+
         modality_mode = modality+'_'+self.mode
-        self.nii_path = os.path.join(dataset_path, modality_mode+'_')
-        self.gt_path = os.path.join(dataset_path, modality_mode+'_')
+
+        dataset_path = os.path.join(self.dataset_path, modality_mode)
         
-        nii_path_npy = self.nii_path+str(1000+index)+'_image.npy'
+        nii_path = os.path.join(dataset_path, modality_mode+'_')
+        gt_path = os.path.join(dataset_path, modality_mode+'_')
         
 
-        if os.path.exists(nii_path_npy):
-            out_dict = np.load(nii_path_npy, allow_pickle=True).item()
-        else:
-            nii_path = self.nii_path+str(1000+index)+'_image.nii.gz'
-            out_dict = dut.load_nib_image(nii_path, omit_tranlation = False)
-            np.save(nii_path_npy, out_dict)
+        nii_path_aligned_pt = os.path.join(self.dataset_path_aligned, modality_mode+'_'+str(1000+index)+'_image.npy')
+        # gt_path_aligned_npy = os.path.join(dataset_path_aligned, modality_mode+'_'+str(1000+index)+'_label.npy')
+        
+        if os.path.exists(nii_path_aligned_pt):
+            out_dict = torch.load(nii_path_aligned_pt)
+            return out_dict
+
     
+
+
+        #### Load the image ####
+
+        nii_path = nii_path+str(1000+index)+'_image.nii.gz'
+        out_dict = dut.load_nib_image(nii_path, omit_tranlation = False)
+        
         image_torch = torch.from_numpy(out_dict['img']).permute(2,1,0).unsqueeze(0).float()
 
 
-        gt_path_npy = self.gt_path+str(1000+index)+'_label.npy'     
         if self.mode == 'train':
-            if os.path.exists(gt_path_npy):
-                label = np.load(gt_path_npy, allow_pickle=True).item()['img']
-            else:
-                gt_path = self.gt_path+str(1000+index)+'_label.nii.gz'
-                label_dict = dut.load_nib_image(gt_path, omit_tranlation = False)
-                np.save(gt_path_npy, label_dict)
-                label = label_dict['img']
+            
+            gt_path = gt_path+str(1000+index)+'_label.nii.gz'
+            label_dict = dut.load_nib_image(gt_path, omit_tranlation = False)
+            label = label_dict['img']
 
             label_torch = torch.from_numpy(label).permute(2,1,0).unsqueeze(0).float()
 
@@ -184,14 +200,17 @@ class MMWHSDataset_3DLabel(Dataset):
                 label_torch = label_tem
                 
         if self.output_shape is not None:
-            label_torch = F.interpolate(label_torch.unsqueeze(0), size = self.output_shape, mode = 'nearest').squeeze(0) 
+            if self.mode == 'train':
+                label_torch = F.interpolate(label_torch.unsqueeze(0), size = self.output_shape, mode = 'nearest').squeeze(0) 
             image_torch = F.interpolate(image_torch.unsqueeze(0), size = self.output_shape, mode = 'trilinear').squeeze(0)
 
 
         if self.mode == 'train':
             out_dict = {'image': image_torch, 'label': label_torch, 'affine': affine_torch, 'window_size': window_size_torch}
+            torch.save(out_dict, nii_path_aligned_pt)
         elif self.mode == 'test':
             out_dict = {'image': image_torch, 'affine': affine_torch, 'window_size': window_size_torch}
+            torch.save(out_dict, nii_path_aligned_pt)
 
         return out_dict
     
@@ -200,10 +219,17 @@ class MMWHSDataset_3DLabel(Dataset):
         if self.mode == 'train':
             length = 20
         elif self.mode == 'test':
-            length = 10
+            if self.modality == 'ct':
+                length = 40
+
         if self.modality == 'mixed':
             length = length*2
         return length
+    
+    def clean_cache(self):
+        import shutil
+        shutil.rmtree(self.dataset_path_aligned)
+        print('Cache cleaned!')
     
 
 class MMWHSDataset_Augmented(MMWHSDataset_3DLabel):
