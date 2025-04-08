@@ -38,7 +38,8 @@ class GHD_config:
             print(k, v)
     #
     def clone(self):
-        self.print()
+        print("num_basis", self.num_basis)
+        print("mix_laplacian_tradeoff", self.mix_laplacian_tradeoff)
         return GHD_config(**self.__dict__)
         
 
@@ -140,16 +141,23 @@ class GHDmesh:
     
 
     
-    def rendering(self, GHD_param=None):
+    def rendering(self, GHD_param=None, Affine_param=None):
         """
         render the mesh by the current GHD parameters
         """
         
         deformation = self.__call__(gh_feature=GHD_param)  # (B, N_verts, 3)
 
-        R_matrix = axis_angle_to_matrix(self.R) # (1, 3, 3)
+        if Affine_param is None:
+            R_matrix = axis_angle_to_matrix(self.R)
+            s = self.s
+            T = self.T
+        else:
+            R_matrix = axis_angle_to_matrix(Affine_param[0])
+            s = Affine_param[1]
+            T = Affine_param[2]
 
-        new_verts = (self.base_shape.verts_padded()+deformation) @ R_matrix.transpose(-1,-2)*self.s + self.T
+        new_verts = (self.base_shape.verts_padded()+deformation) @ R_matrix.transpose(-1,-2)*s + T
         
         output_shape = self.base_shape.update_padded(new_verts)
 

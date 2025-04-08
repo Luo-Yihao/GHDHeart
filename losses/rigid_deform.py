@@ -32,36 +32,12 @@ class RigidLoss(MessagePassing):
 
     def message(self, x_i, x_j, y_i, y_j, edge_index_i, weight_undir):
 
-        # x_Ni_mean = scatter(x_j, edge_index_i, dim=0, reduce="mean")
-        # x_Ni_mean = x_Ni_mean.index_select(0,edge_index_i)
 
-        # x_ii = (x_i - x_Ni_mean)
-        # x_ij = (x_j - x_Ni_mean)
         x_ij = (x_j - x_i)
 
-        # y_Ni_mean = scatter(y_j, edge_index_i, dim=0, reduce="mean")
-        # y_Ni_mean = y_Ni_mean.index_select(0,edge_index_i)
 
-        # y_ii = (y_i - y_Ni_mean)
-        # y_ij = (y_j- y_Ni_mean)
         y_ij = (y_j- y_i)
     
-
-
-        # x_ii_onehot = one_hot_sparse(x_ii, edge_index_i)
-        # y_ii_onehot = one_hot_sparse(y_ii, edge_index_i)
-        
-        # XtX_onehot = torch.bmm(x_ii_onehot.transpose(-1,-2),x_ii_onehot.to_dense())
-        # YtY_onehot = torch.bmm(y_ii_onehot.transpose(-1,-2),y_ii_onehot.to_dense())
-        # traceX = torch.diagonal(XtX_onehot,dim1=-2,dim2=-1).sum(dim=-1)
-        # traceY = torch.diagonal(YtY_onehot,dim1=-2,dim2=-1).sum(dim=-1)
-
-        # traceX = torch.sqrt(traceX/3.0).index_select(0,edge_index_i)
-        # traceY = torch.sqrt(traceY/3.0).index_select(0,edge_index_i)
-        
-
-        # y_ij_onehot = one_hot_sparse(y_ij/traceY.unsqueeze(-1), edge_index_i) # N*E*3
-        # x_ij_onehot = one_hot_sparse(x_ij/traceX.unsqueeze(-1), edge_index_i)# N*E*3
 
         x_ij_onehot = one_hot_sparse(x_ij, edge_index_i)
         y_ij_onehot = one_hot_sparse(y_ij, edge_index_i)
@@ -119,7 +95,7 @@ if __name__ == "__main__":
     edge_index = torch.tensor(
         [[0,0, 1, 0, 1, 2], [1,3, 2, 2, 3,3]], dtype=torch.long)
     weight = torch.tensor([1,2,3,4,5,6], dtype=torch.float)
-    x = conv(x,z+0*torch.randn_like(z), edge_index,weight)
+    x = conv(x,z+torch.randn_like(z), edge_index, weight)
 
     print(x)
  

@@ -15,7 +15,7 @@ def get_4chamberview_frame(cav_pts, lv_pts, rv_pts):
 
     Cov_cav = torch.matmul((cav_pts-Pt_center).transpose(0,1), cav_pts-Pt_center)/cav_pts.shape[-2]
     
-    _, eigvecs = torch.linalg.eigh(Cov_cav)
+    _, eigvecs = torch.linalg.eigh(Cov_cav+1e-6*torch.eye(3).to(cav_pts.device))
 
     u2d_axis = eigvecs[:,-1]
 

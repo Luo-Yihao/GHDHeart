@@ -6,11 +6,10 @@ This repository contains the official implementation of our paper **[Explicit Di
 ![Example](img/Novelty.png)
 
 ## What We Provide
-
 When dealing with cardiac scanned data (MRI, CT, ultrasound, etc.), reconstructing the 3D mesh of the heart is a common challenge. Without a ground truth mesh, how can we achieve 3D optimization and reconstruction using only 2D slices for supervision? Our solution allows any loss designed for 2D slices to be directly used for 3D mesh optimization through the gradient back-propagation of **differentiable voxelization and slicing (DVS)**. Another key contribution is that we use **global harmonic deformation (GHD)** to model the cardiac shape which preserves the smoothness and mesh quality during optimization without extra regularization in losses. The proposed method is robust to sparse and can be applied to various datasets in different resolutions and modalities.
 
 ## News
-
+- **2025-03**: Important update: We have released a new version of the code with refined canonicals and a unified approach to data processing across diverse datasets. 
 - **2024-09**: The code is released.
 
 ## How to Use
@@ -23,11 +22,13 @@ conda activate GHDHeart
 pip install -r requirements.txt
 ```
 ### 2. Quick Start
+![Optimization](img/visualization_ED.png)
+
 Run GHD fitting on the provided example data:
 
 ```bash
 cd GHDHeart/Demo
-python GHD_sparse_fitting.py --iter 1000 --target ES (or ED)
+python example.py --csize 4055 (or 800/2000) --target ES (or ED) 
 ```
 The code will load the example data and perform the optimization for 1000 iterations. The target phase can be set as 'ES' or 'ED'. The result meshes will be saved in the 'Demo/output' folder. The accuracy of the result can be evaluated by the Dice score printed in the console.
 

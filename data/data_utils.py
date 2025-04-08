@@ -357,3 +357,31 @@ class GaussianBlur3D(nn.Module):
         coords = coords.expand(kernel_size, kernel_size, kernel_size)
         g = torch.exp(-(coords**2 + coords.transpose(0,1)**2 + coords.transpose(0,2)**2) / (2*sigma**2))
         return g / g.sum()
+    
+    
+def affine_np2torch(affine_np, img_size_np, rescalar = 1/100, center_aligned = True):
+    '''
+    convert affine matrix from numpy manner to torch manner
+    affine_np: [4, 4] original affine matrix read from the medical image file
+    img_size: [3] the size of the image, [x, y, z]
+    rescalar: [1] the rescalar of the image, default is 1/100mm, [-100mm, 100mm] -> [-1, 1]
+    center_aligned: [bool] whether the image is center aligned, default is True
+    '''
+    if isinstance(affine_np, np.ndarray):
+        affine_torch = torch.from_numpy(affine_np).float()
+    else:
+        affine_torch = affine_np.float()
+ 
+
+    affine_torch2np = torch.diag(torch.tensor([img_size_np[0]-1., img_size_np[1]-1., img_size_np[2]-1., 1.]))/2.
+    affine_torch2np = affine_torch2np.to(affine_torch.device)
+    if center_aligned:
+        affine_torch[:3, 3] = 0 # set the translation to 0
+    else:
+        affine_torch2np[:3, 3] = torch.tensor([img_size_np[0]-1., img_size_np[1]-1., img_size_np[2]-1.])/2.
+    affine_torch = affine_torch@affine_torch2np
+    affine_torch[:3,:] = affine_torch[:3,:]*rescalar
+    affine_torch[3,:] = torch.tensor([0,0,0,1]).to(affine_torch.device)
+    return affine_torch
+
+
