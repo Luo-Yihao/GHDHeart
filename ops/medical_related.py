@@ -1,6 +1,6 @@
 import torch
 
-def get_4chamberview_frame(cav_pts, lv_pts, rv_pts):
+def get_4chamberview_frame(cav_pts, lv_pts, rv_pts, **kwargs):
     '''find the frame for 4 chamber view, from points smapled from 3 cavity&ventricle.
     cav_pts: torch.tensor, (N, 3)
     lv_pts: torch.tensor, (N, 3)
@@ -9,6 +9,9 @@ def get_4chamberview_frame(cav_pts, lv_pts, rv_pts):
     return: target_affine: torch.tensor, (4, 4),
 
     '''
+
+    
+
     Pt_center = cav_pts.mean(dim=0) # center of the cavity
     Pt_center_lv = lv_pts.mean(dim=0) # center of the lv
     Pt_center_rv = rv_pts.mean(dim=0) # center of the rv
@@ -31,6 +34,14 @@ def get_4chamberview_frame(cav_pts, lv_pts, rv_pts):
 
     if dist_max.norm() > dist_min.norm():
         u2d_axis = -u2d_axis
+
+    if 'given_u2d_axis' in kwargs:
+        if (u2d_axis*kwargs['given_u2d_axis']).sum() < 0:
+            u2d_axis = -kwargs['given_u2d_axis']
+        else:
+            u2d_axis = kwargs['given_u2d_axis']
+
+    u2d_axis = u2d_axis/torch.norm(u2d_axis)
 
 
     l2r_axis = Pt_center_rv-Pt_center
