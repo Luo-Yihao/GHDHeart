@@ -105,6 +105,21 @@ class GHD_Cardiac(GHDmesh):
         output_trimesh.vertices = new_verts
         return output_trimesh
     
+    def get_affine_matrix(self):
+        """
+        get the current affine parameters
+        return: the affine matrix
+        """
+        R_matrix = axis_angle_to_matrix(self.R)[0].detach()
+        s = self.s[0].detach()
+        T = self.T[0].detach()
+        affine_matrix = torch.eye(4).to(self.device)
+        affine_matrix[:3, :3] = R_matrix 
+        affine_matrix[:3, :3] *= s 
+        affine_matrix[:3, 3] = T.view((3,))
+        return affine_matrix
+
+    
     def dice_evaluation(self, target_positives, target_negatives):
         """
         evaluate the dice loss of the current mesh and the target point cloud
