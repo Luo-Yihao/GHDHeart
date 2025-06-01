@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from probreg import cpd
 
 from torch_scatter import scatter
 
@@ -24,11 +25,12 @@ import numpy as np
 class GHD_config:
     def __init__(self, **args):
         self.base_shape_path = None 
-        self.num_basis = 7*7+1
+        self.num_basis = 6*6
         self.device = "cuda:0"
-        self.mix_laplacian_tradeoff = {'cotlap': 1.0, 'dislap': 1e-3, 'stdlap': 1e-3}
+        self.mix_laplacian_tradeoff = {'cotlap': 1.0, 'dislap': 0.1, 'stdlap': 0.1}
         self.if_lap_nomalize = True
-        self.eign_path = None
+        self.GH_eigval = None
+        self.GH_eigvec = None
         self.__dict__.update(args)
         
 
@@ -56,7 +58,10 @@ class GHDmesh:
         self.device = cfg.device
         if base_shape is None:
             self.base_shape = load_objs_as_meshes([cfg.base_shape_path], device=cfg.device)
-            self.cfg.eign_path = None
+            self.GH_eigval = (cfg.GH_eigval).to(cfg.device).float() if cfg.GH_eigval is not None else None
+            self.GH_eigvec = (cfg.GH_eigvec).to(cfg.device).float() if cfg.GH_eigvec is not None else None
+            self.cfg.GH_eigval = None
+
         else:
             self.base_shape = base_shape
 
@@ -64,9 +69,7 @@ class GHDmesh:
                                                                                                  cfg.mix_laplacian_tradeoff, 
                                                                                                  if_return_scipy=cfg.if_return_scipy,
                                                                                                  if_nomalize=cfg.if_lap_nomalize)
-        if cfg.eign_path is not None:
-            self.GH_eigval, self.GH_eigvec = torch.load(cfg.eign_path, map_location=cfg.device)
-        else:
+        if cfg.GH_eigvec == None:
             self.GH_eigval, self.GH_eigvec = eigsh(self.mix_laplacian, cfg.num_basis, which='SM')
             self.GH_eigval = torch.from_numpy(self.GH_eigval).to(cfg.device).float().unsqueeze(0)
             self.GH_eigvec = torch.from_numpy(self.GH_eigvec).to(cfg.device).float().unsqueeze(0)
@@ -82,7 +85,6 @@ class GHDmesh:
         new_gh_mesh.GHD_param.data = new_gh_param
         return new_gh_mesh
         
-
 
     def reset_affine_param(self):
         """
@@ -120,7 +122,6 @@ class GHDmesh:
             gh_feature = gh_feature.unsqueeze(0)
 
         return self.GH_eigvec.matmul(gh_feature)
-
         
     
     def vertf_to_ghf(self, vert_feature):
@@ -139,7 +140,50 @@ class GHDmesh:
             
         return self.GH_eigvec.transpose(-1,-2).matmul(vert_feature)
     
+    def get_affine_matrix(self):
+        """
+        get the current affine parameters
+        return: the affine matrix
+        """
+        R_matrix = axis_angle_to_matrix(self.R)[0].detach()
+        s = self.s[0].detach()
+        T = self.T[0].detach()
+        affine_matrix = torch.eye(4).to(self.device)
+        affine_matrix[:3, :3] = R_matrix 
+        affine_matrix[:3, :3] *= s 
+        affine_matrix[:3, 3] = T.view((3,))
+        return affine_matrix
+    
 
+
+    def global_registration(self, target_pcl, update_scale=True):
+        """ 
+        the global registration of the  mesh and the target left ventricle point cloud,
+        which gurantee the initial affine parameters is basically correct and avoid the ambiguity caused by the symmetry of the left ventricle
+        target_pcl: (N, 3)
+        return: the affine parameters (update the self.R, self.s, self.T automatically)
+        """
+        trimesh_tem = trimesh.Trimesh(self.base_shape.verts_packed().detach().cpu().numpy(),
+                                            self.base_shape.faces_packed().detach().cpu().numpy())
+        
+        num_points = target_pcl.shape[0]
+        point_cloud_canonical_lv = trimesh.sample.volume_mesh(trimesh_tem, num_points)
+
+        R_matrix = axis_angle_to_matrix(self.R)[0].detach().cpu().numpy()
+        s = self.s[0].detach().cpu().numpy()
+        T = self.T[0].detach().cpu().numpy()
+        param_dict = {'rot':R_matrix, 'scale':s, 't':T}
+        rgd_cpd = cpd.RigidCPD(point_cloud_canonical_lv, tf_init_params=param_dict, update_scale=update_scale)
+        tf_param, _, _ = rgd_cpd.registration(target_pcl)
+        R, s, T =tf_param.rot, tf_param.scale, tf_param.t
+        param_dict = {'rot':R, 'scale':s, 't':T}
+        
+
+        self.R = nn.Parameter(matrix_to_axis_angle(torch.from_numpy(R).float().to(self.device)).unsqueeze(0))
+        self.s = nn.Parameter(torch.tensor([s], device=self.device).float().unsqueeze(0))
+        self.T = nn.Parameter(torch.from_numpy(T).float().to(self.device).unsqueeze(0))
+
+        return param_dict
     
     def rendering(self, GHD_param=None, Affine_param=None):
         """

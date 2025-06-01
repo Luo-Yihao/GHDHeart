@@ -1,16 +1,29 @@
 import torch
 
 def get_4chamberview_frame(cav_pts, lv_pts, rv_pts, **kwargs):
-    '''find the frame for 4 chamber view, from points smapled from 3 cavity&ventricle.
-    cav_pts: torch.tensor, (N, 3)
-    lv_pts: torch.tensor, (N, 3)
-    rv_pts: torch.tensor, (N, 3)
+    """
+    Find the frame for 4-chamber view from points sampled from 3 cavities and ventricles.
+    Args:
+        cav_pts (torch.Tensor): Tensor of shape (N, 3) representing points sampled from the cavity.
+        lv_pts (torch.Tensor): Tensor of shape (N, 3) representing points sampled from the left ventricle (LV).
+        rv_pts (torch.Tensor): Tensor of shape (N, 3) representing points sampled from the right ventricle (RV).
+        **kwargs: Additional optional arguments.
+            - given_u2d_axis (torch.Tensor, optional): Predefined axis for up-to-down direction. If provided, it will be used to adjust the calculated axis.
+    Returns:
+        dict: A dictionary containing the following keys:
+            - 'mean_cav' (torch.Tensor): Center point of the cavity.
+            - 'mean_lv' (torch.Tensor): Center point of the left ventricle.
+            - 'mean_rv' (torch.Tensor): Center point of the right ventricle.
+            - 'b2f_axis' (torch.Tensor): Back-to-front axis of the 4-chamber view.
+            - 'l2r_axis' (torch.Tensor): Left-to-right axis of the 4-chamber view.
+            - 'u2d_axis' (torch.Tensor): Up-to-down axis of the 4-chamber view.
+            - 'target_affine' (torch.Tensor): Transformation matrix of shape (4, 4) representing the target frame.
+    Notes:
+        - PCA of the cavity points is used to determine the up-to-down (u2d) axis (principal component).
+        - The left-to-right (l2r) axis is determined by the vector from the center of the cavity to the center of the right ventricle.
+        - The RV's triangular structure is used to determine the long-axis direction by identifying the upper part of the RV that is farthest from the LV's central axis.
+    """
 
-    return: target_affine: torch.tensor, (4, 4),
-
-    '''
-
-    
 
     Pt_center = cav_pts.mean(dim=0) # center of the cavity
     Pt_center_lv = lv_pts.mean(dim=0) # center of the lv
@@ -22,14 +35,13 @@ def get_4chamberview_frame(cav_pts, lv_pts, rv_pts, **kwargs):
 
     u2d_axis = eigvecs[:,-1]
 
-
-    u2d_axis_proj = (lv_pts-Pt_center).matmul(u2d_axis)
+    u2d_axis_proj = (rv_pts-Pt_center).matmul(u2d_axis)
     
     u2d_axis_proj_max, u2d_axis_proj_max_idx = u2d_axis_proj.max(dim=0)
     u2d_axis_proj_min, u2d_axis_proj_min_idx = u2d_axis_proj.min(dim=0)
 
-    dist_max = (lv_pts[u2d_axis_proj_max_idx]-Pt_center) - u2d_axis_proj_max*u2d_axis
-    dist_min = (lv_pts[u2d_axis_proj_min_idx]-Pt_center) - u2d_axis_proj_min*u2d_axis
+    dist_max = (rv_pts[u2d_axis_proj_max_idx]-Pt_center) - u2d_axis_proj_max*u2d_axis
+    dist_min = (rv_pts[u2d_axis_proj_min_idx]-Pt_center) - u2d_axis_proj_min*u2d_axis
 
 
     if dist_max.norm() > dist_min.norm():

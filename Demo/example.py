@@ -69,9 +69,17 @@ import ops.medical_related as med
 from data.dataset import Example_Simple_dataset
 
 def main():
+    
+    GHD_basis = None
+    GHD_eigval = None
+    if canonical_size == 1705:
+        base_shape_path = '../canonical_shapes/wholeheart_canonical/LV.obj'
+        if num_basis == 6**2:
+            GHD_basis = torch.load('../canonical_shapes/wholeheart_canonical/GHD_basis_4CH_B36.pt')['lv']
+            GHD_eigval = torch.load('../canonical_shapes/wholeheart_canonical/GHD_eigval_4CH_B36.pt')['lv']
+            print("loading GHD basis and eigenvalues from ../canonical_shapes/wholeheart_canonical/GHD_basis_4CH_B36.pt")
 
-# %%
-    if canonical_size == 2000:
+    elif canonical_size == 2000:
         base_shape_path = '../canonical_shapes/Standard_LV_2000.obj'
     elif canonical_size == 800:
         base_shape_path = '../canonical_shapes/Standard_LV_800.obj'
@@ -82,32 +90,21 @@ def main():
     
     print("Number of Faces: ", canonical_size)
 
-    bi_ventricle_path = '../canonical_shapes/Standard_BiV.obj'
+
 
     # base_shape_path = 'metadata/Standard_LV.obj'
     # bi_ventricle_path = 'metadata/Standard_BiV.obj'
+    
 
     cfg = GHD_config(base_shape_path=base_shape_path,
                 num_basis=num_basis, mix_laplacian_tradeoff={'cotlap':1.0, 'dislap':0.1, 'stdlap':0.1},
-                device='cuda:0',
-                if_nomalize=True, if_return_scipy=True, 
-                bi_ventricle_path=bi_ventricle_path)
+                device=device,
+                GH_eigval= GHD_eigval,
+                GH_eigvec= GHD_basis,
+                if_nomalize=True, 
+                if_return_scipy=True)
 
-    paraheart = GHD_Cardiac(cfg) # 
-
-
-    # load initial orientation according to dataset
-
-    # with open('../canonical_shapes/ukbb_init_affine.pkl', 'rb') as f:
-    #     initial_orientation = pickle.load(f)
-
-    # R = initial_orientation[:3,:3].astype(np.float32)
-    # T = initial_orientation[:3,3].astype(np.float32)
-
-    # paraheart.R = matrix_to_axis_angle(torch.from_numpy(R).to(paraheart.device)).view(paraheart.R.shape)
-    # paraheart.T = torch.from_numpy(T).to(paraheart.device).view(paraheart.T.shape)
-
-    # %%
+    paraheart = GHD_Cardiac(cfg) 
     root_path = os.path.dirname(os.path.realpath('.'))
 
     root_path = os.path.join(root_path,'data_example')
@@ -170,15 +167,16 @@ def main():
     sample_num = 2000
 
     sample_lv = points_lv[np.random.choice(points_lv.shape[0], sample_num, replace=False)]
-    paraheart.global_registration_lv(sample_lv.detach().cpu().numpy())
+    paraheart.global_registration(sample_lv.detach().cpu().numpy())
 
  
 
 
     # ----- GHD fitting ------
-    convergence, Loss_dict_list  = paraheart.morphing2lvtarget(points_lv, points_outoflv_in_bbox, loss_dict 
+    convergence, Loss_dict_list  = paraheart.fitting2target(points_lv, points_outoflv_in_bbox, loss_dict 
                                 = {'Loss_occupancy':1,  'Loss_Laplacian':0.001, 'Loss_thickness':0.001},
-                                lr_start=lr, num_iter=iter, if_reset=True, if_fit_R=False, if_fit_s=True, if_fit_T=True, record_convergence=True)
+                                lr_start=lr, num_iter=iter, if_reset=True, if_fit_R=False, if_fit_s=True, 
+                                if_fit_T=True, record_convergence=True, Distance_weighted= 1.)
 
 
     ## --------Visualization------
@@ -205,9 +203,9 @@ def main():
 
         color_gt = (label_tem[0,0,i].cpu().numpy().T.flatten()).astype(np.float32)
         
-        color_opacity = np.ones_like(color_gt)*0.8
+        color_opacity = np.ones_like(color_gt)*0.2
 
-        color_opacity[color_gt == 0] = 0.2
+        color_opacity[color_gt == 0] = 0.1
 
         pl.add_mesh(grid, scalars = color_gt, cmap = 'Accent_r',
                     show_scalar_bar = False, opacity = color_opacity,
@@ -222,12 +220,10 @@ def main():
     # trimesh_gt_lv = trimesh.Trimesh(mesh_gt_lv.verts_packed().detach().cpu().numpy(), mesh_gt_lv.faces_packed().detach().cpu().numpy())
     # pl.add_mesh(trimesh_gt_lv, color='lightgreen', opacity=0.1)
 
-    trimesh_current_lv = trimesh.Trimesh(out_ghd_mesh.verts_packed().detach().cpu().numpy(), out_ghd_mesh.faces_packed().detach().cpu().numpy())
-    pl.add_mesh(trimesh_current_lv, color='lightblue', opacity=0.8, show_edges=False, show_vertices=False, lighting=False)
-
-    pl.add_points(sample_lv.detach().cpu().numpy(), color='green', point_size=3, 
-                  render_points_as_spheres=True, lighting=False)
-
+    trimesh_current_lv = trimesh.Trimesh(out_ghd_mesh.verts_packed().detach().cpu().numpy(), 
+                                         out_ghd_mesh.faces_packed().detach().cpu().numpy())
+    pl.add_mesh(trimesh_current_lv, color='lightblue', opacity=0.8, 
+                show_edges=True, show_vertices=False, lighting=False)
 
     pl.add_mesh(pv.Box(bounds=[-1, 1, -1, 1, -1, 1]).outline(), color='black')
     pl.add_text(target, font_size=10, position='upper_edge')
@@ -260,7 +256,7 @@ def main():
         os.makedirs('output', exist_ok=True)
 
     visual = pl.screenshot('output/visualization_'+target+'.png', 
-                           window_size=[int(512*2.5), 512])
+                           window_size=[int(1024*2.5), 1024])
     
 
         
@@ -288,8 +284,8 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda:0')
-    parser.add_argument('--csize', type=int, default=4055, help='alternative canonical meshes with number of faces 2000, 800, 4055')
-    parser.add_argument('--num_basis', type=int, default=9**2, help='number of basis GHD, default is 9*9')
+    parser.add_argument('--csize', type=int, default=1705, help='alternative canonical meshes with number of faces 1705, 2000, 800, 4055')
+    parser.add_argument('--num_basis', type=int, default=6**2, help='number of basis GHD, default is 9*9')
     parser.add_argument('--target', type=str, default='ED')
     parser.add_argument('--iter', type=int, default=500)
     parser.add_argument('--lr', type=float, default=1e-3*5)

@@ -6,13 +6,12 @@ class BinaryDiceLoss(nn.Module):
 	def __init__(self):
 		super(BinaryDiceLoss, self).__init__()
 	
-	def forward(self, input, targets):
+	def forward(self, input, targets, weight=None, smooth=1):
 
-		
 		# batch size
 		N = targets.shape[0]
 		# smoothness
-		smooth = 1
+		smooth = smooth if smooth is not None else 1
 		# flatten
 		input_flat = input.reshape(N, -1)
 		targets_flat = targets.reshape(N, -1)
@@ -20,9 +19,12 @@ class BinaryDiceLoss(nn.Module):
 		# calculate intersection and union
 		intersection = input_flat * targets_flat 
 		N_dice_eff = (2 * intersection.sum(1) + smooth) / (input_flat.sum(1) + targets_flat.sum(1) + smooth + 1e-6)
+
+
 		# mean over batch
-		loss = (1 - N_dice_eff).mean()
-		return loss
+		loss = (1 - N_dice_eff)*weight if weight is not None else (1 - N_dice_eff)
+
+		return loss.mean() 
 	
 class MultiClassDiceLoss(nn.Module):
 	def __init__(self, weight=None, ignore_index=[], **kwargs):
